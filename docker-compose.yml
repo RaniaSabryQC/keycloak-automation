@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  keycloak-db:
+    # Use the official, stable MySQL 5.7 image directly to avoid
+    # the previous low-level 'top' and 'start' execution errors.
+    image: mysql:5.7
+    container_name: keycloak-db
+    restart: always
+    environment:
+      # Database access configuration
+      MYSQL_DATABASE: ${KC_DB_DATABASE:-keycloak}
+      MYSQL_USER: ${KC_DB_USERNAME:-keycloak}
+      MYSQL_PASSWORD: ${KC_DB_PASSWORD:-password}
+      MYSQL_ROOT_PASSWORD: ${KC_DB_PASSWORD:-password} # Use same password for root
+
+    # Simple, standard health check for MySQL
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    volumes:
+      # Persist the database data
+      - ./data/mysql:/var/lib/mysql
+
+    # Keep the network isolated to internal traffic
+    networks:
+      - keycloak-net
+
+  keycloak-app:
+    # Build the custom Keycloak image using the Dockerfile in the keycloak/ folder
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
+    image: medad-identity:keycloak-custom
+    container_name: keycloak-app
+    restart: always
+
+    # Map the secure 8443 port for HTTPS access
+    ports:
+      - "8443:8443"
+
+    environment:
+      # Keycloak Database Connection Settings (must match the 'db' service)
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://keycloak-db:3306/${KC_DB_DATABASE:-keycloak}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-password}
+
+      # Keycloak Admin User (used for initial setup)
+      KEYCLOAK_ADMIN: ${KC_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-password}
+
+      # Ensure HTTPS is enabled since you built a keystore for it
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/server.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/server.key
+      KC_HTTPS_KEYSTORE_FILE: /opt/keycloak/conf/server.keystore
+      KC_HTTPS_KEYSTORE_PASSWORD: password
+      KC_HTTPS_PORT: 8443
+      
+      # Health and Metrics are enabled in the Dockerfile
+      KC_HOSTNAME: localhost
+
+    depends_on:
+      # Ensures the database is healthy before starting Keycloak
+      keycloak-db:
+        condition: service_healthy
+
+    networks:
+      - keycloak-net
+
+networks:
+  keycloak-net:
+    driver: bridge

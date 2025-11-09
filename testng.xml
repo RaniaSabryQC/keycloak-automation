@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Keycloak Automation Suite" verbose="1">
+
+    <!-- Add listener here -->
+    <listeners>
+        <listener class-name="com.automation.listeners.AllureReportListener"/>
+    </listeners>
+
+    <test name="Keycloak HTTP API Tests">
+        <classes>
+            <class name="com.automation.tests.KeycloakUserTest"/>
+        </classes>
+    </test>
+
+</suite>
